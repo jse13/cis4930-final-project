@@ -53,6 +53,7 @@ class BoggleGameWindow(qtw.QMainWindow):
         self.setGeometry(200, 200, 750, 500)
         self.setWindowTitle('Boggle')
 
+
         # Create a menu bar and add options
         menu_bar = self.menuBar()
         menu_bar.setNativeMenuBar(False)
@@ -60,12 +61,15 @@ class BoggleGameWindow(qtw.QMainWindow):
         game_menu = menu_bar.addMenu('Game')
 
         newgame_action = qtw.QAction('New', self)
+        newgame_action.triggered.connect(self.new_game)
         game_menu.addAction(newgame_action)
 
         savegame_action = qtw.QAction('Save', self)
+        savegame_action.triggered.connect(self.save_game)
         game_menu.addAction(savegame_action)
 
         loadgame_action = qtw.QAction('Load', self)
+        loadgame_action.triggered.connect(self.load_game)
         game_menu.addAction(loadgame_action)
 
 
@@ -74,6 +78,17 @@ class BoggleGameWindow(qtw.QMainWindow):
         self.setCentralWidget(self.boggle_game)
 
         self.show()
+
+    def new_game(self):
+        logging.debug("Starting new game")
+        self.boggle_game.start()
+
+    def save_game(self):
+        logging.debug("Saving current game")
+        self.boggle_game.save()
+
+    def load_game(self):
+        logging.debug("Loading a game")
 
 
 class BoggleGame(qtw.QWidget):
@@ -102,41 +117,36 @@ class BoggleGame(qtw.QWidget):
         self.grid.addWidget(self.input_box, 2, 1, 1, 4)
 
 
+    def start(self):
+        self.boggle_letters.clear()
+        self.boggle_letters.draw_dice()
+
 class BoggleLetters(qtw.QWidget):
     def __init__(self, parent):
         qtw.QWidget.__init__(self, parent)
         self.setup()
 
     def setup(self):
-        #self.grid = qtw.QGridLayout()
-        #self.setLayout(self.grid)
-
         self.vbox = qtw.QVBoxLayout()
         self.setLayout(self.vbox)
         self.vbox.setSpacing(0)
 
-        dice = rollDice()
+    def draw_dice(self):
+        self.dice = rollDice()
 
-        logging.debug("Dice rolled are {}".format(dice))
+        logging.debug("Dice rolled are {}".format(self.dice))
         
-        #x = 1
-        #y = 1
-        for row in dice:
+        for row in self.dice:
             rowLayout = qtw.QHBoxLayout()
             self.vbox.addLayout(rowLayout)
-            #rowLayout.addStretch(0.1)
             for letter in row:
                 logging.debug("Drawing box for \"{}\"".format(letter))
                 rowLayout.addWidget(LetterBox(self, letter), 0)
-            #rowLayout.addStretch(1)
-
-            #for letter in row:
-            #    self.grid.addWidget(LetterBox(self), x, y, 1, 1)
-            #    y += 1
-            #x += 1
-            #y = 1
-
-
+        
+    def clear(self):
+        for row in range(0, self.vbox.count()):
+            for column in range(0, self.vbox.itemAt(row).count()):
+                self.vbox.itemAt(row).itemAt(column).widget().deleteLater()
 
 class LetterBox(qtw.QWidget):
     def __init__(self, parent, letter):
@@ -153,16 +163,29 @@ class LetterBox(qtw.QWidget):
                        qtc.QPoint(0, 74)]
 
         square = qtg.QPolygon(points_list)
+
         qp = qtg.QPainter()
         qp.begin(self)
+
         font = qp.font()
         font.setBold(True)
         font.setPointSize(font.pointSize() * 2)
-        logging.debug("Setting font size to {}".format(font.pointSize()))
         qp.setFont(font)
-        qp.drawText(qtc.QPoint(26,48), self.letter)
+
+        # Since Qu is longer than the rest, this makes sure it's still centered
+        if self.letter == "Qu":
+            letter_pos = qtc.QPoint(15,48)
+        else:
+            letter_pos = qtc.QPoint(26,48)
+
+        qp.drawText(letter_pos, self.letter)
+
         qp.drawPolygon(square)
+
         qp.end()
+
+    def kill(self):
+        pass
 
 
 class StartNewGameButton(qtw.QPushButton):
@@ -177,6 +200,7 @@ class QuitButton(qtw.QPushButton):
         qtw.QPushButton.__init__(self, parent)
         self.setText("Quit")
         self.move(150, 160)
+
 
 if __name__ == "__main__":
     app = qtw.QApplication(sys.argv)
