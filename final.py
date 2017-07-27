@@ -6,6 +6,9 @@ from PyQt5 import QtCore as qtc
 import sys
 import random
 import enchant
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
 
 
 dice = (['A', 'E', 'A', 'N', 'E', 'G'],
@@ -47,7 +50,7 @@ class BoggleGameWindow(qtw.QMainWindow):
 
     def setup(self):
         # Basic window info
-        self.setGeometry(200, 200, 700, 500)
+        self.setGeometry(200, 200, 750, 500)
         self.setWindowTitle('Boggle')
 
         # Create a menu bar and add options
@@ -105,35 +108,59 @@ class BoggleLetters(qtw.QWidget):
         self.setup()
 
     def setup(self):
-        self.grid = qtw.QGridLayout()
-        self.setLayout(self.grid)
+        #self.grid = qtw.QGridLayout()
+        #self.setLayout(self.grid)
+
+        self.vbox = qtw.QVBoxLayout()
+        self.setLayout(self.vbox)
+        self.vbox.setSpacing(0)
 
         dice = rollDice()
+
+        logging.debug("Dice rolled are {}".format(dice))
         
-        x = 1
-        y = 1
+        #x = 1
+        #y = 1
         for row in dice:
+            rowLayout = qtw.QHBoxLayout()
+            self.vbox.addLayout(rowLayout)
+            #rowLayout.addStretch(0.1)
             for letter in row:
-                self.grid.addWidget(LetterBox(self), x, y, 1, 1)
-                y += 1
-            x += 1
-            y = 1
+                logging.debug("Drawing box for \"{}\"".format(letter))
+                rowLayout.addWidget(LetterBox(self, letter), 0)
+            #rowLayout.addStretch(1)
+
+            #for letter in row:
+            #    self.grid.addWidget(LetterBox(self), x, y, 1, 1)
+            #    y += 1
+            #x += 1
+            #y = 1
 
 
 
 class LetterBox(qtw.QWidget):
-    def __init__(self, parent):
+    def __init__(self, parent, letter):
         qtw.QWidget.__init__(self, parent)
+        self.grid = qtw.QGridLayout()
+        self.setLayout(self.grid)
+
+        self.letter = letter
 
     def paintEvent(self, event):
         points_list = [qtc.QPoint(0, 0),
-                       qtc.QPoint(50, 0),
-                       qtc.QPoint(50, 50),
-                       qtc.QPoint(0, 50)]
+                       qtc.QPoint(74, 0),
+                       qtc.QPoint(74, 74),
+                       qtc.QPoint(0, 74)]
 
         square = qtg.QPolygon(points_list)
         qp = qtg.QPainter()
         qp.begin(self)
+        font = qp.font()
+        font.setBold(True)
+        font.setPointSize(font.pointSize() * 2)
+        logging.debug("Setting font size to {}".format(font.pointSize()))
+        qp.setFont(font)
+        qp.drawText(qtc.QPoint(26,48), self.letter)
         qp.drawPolygon(square)
         qp.end()
 
