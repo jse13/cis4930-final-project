@@ -4,10 +4,13 @@ from __future__ import print_function
 from PyQt5 import QtWidgets as qtw
 from PyQt5 import QtGui as qtg
 from PyQt5 import QtCore as qtc
+import os
 import sys
+import cPickle as pickle
 import random
 import enchant
 import logging
+from datetime import datetime
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -185,9 +188,9 @@ def isCharInGrid(dice, char):
 class BoggleGameWindow(qtw.QMainWindow):
     def __init__(self):
         qtw.QWidget.__init__(self)
-        self.setup()
+        self.setup(self.app_start_dialog())
 
-    def setup(self):
+    def setup(self, load_game):
         # Basic window info
         self.setGeometry(200, 200, 750, 500)
         self.setWindowTitle('final.py')
@@ -218,16 +221,100 @@ class BoggleGameWindow(qtw.QMainWindow):
 
         self.show()
 
+        if load_game is True:
+            self.load_game()
+        else:
+            self.new_game()
+
     def new_game(self):
         logging.debug("Starting new game")
         self.boggle_game.start()
 
     def save_game(self):
         logging.debug("Saving current game")
-        self.boggle_game.save()
+
+        self.boggle_game.pause()
+
+        data_to_save = self.boggle_game.save()
+
+        # Make the save directory if it doesn't exist
+        if not os.path.exists("./.saves"):
+            os.makedirs("./.saves")
+
+        # Make filename current time and date, and replace invalid chars
+        curr_time = "{:%c}".format(datetime.now()).replace(':','-')
+
+        with open("./.saves/" + curr_time, "w") as outfile:
+            outfile.write(data_to_save)
+
+        logging.debug("Saved game to .saves/" + curr_time)
+
+        self.boggle_game.resume()
 
     def load_game(self):
         logging.debug("Loading a game")
+
+        self.boggle_game.pause()
+
+        load_dialog = LoadDialog()
+        load_dialog.exec_()
+
+        if load_dialog.selected_item is None:
+            logging.error("There was no selection returned by the load dialog")
+            exit()
+        else:
+            self.boggle_game.load(load_dialog.selected_item)
+
+        self.boggle_game.resume()
+
+    def app_start_dialog(self):
+        start_msg = qtw.QMessageBox()
+
+        start_msg.setText("Would you like to start a new game or load a saved game?")
+
+        new_game = start_msg.addButton("Start New Game", qtw.QMessageBox.RejectRole)
+        load_game = start_msg.addButton("Load Game", qtw.QMessageBox.AcceptRole)
+
+        reply = start_msg.exec_()
+
+        if reply is 1:
+            logging.debug("Loading an existing game upon startup...")
+            return True
+        else:
+            logging.debug("Creating a new game upon startup...")
+            return False
+
+
+class LoadDialog(qtw.QDialog):
+    def __init__(self):
+        qtw.QDialog.__init__(self)
+        
+        self.selected_item = None
+
+        self.vbox = qtw.QVBoxLayout()
+        self.setLayout(self.vbox)
+
+        self.resize(350, 450)
+
+
+        self.text = qtw.QLabel("Select a game to load:", self)
+        self.vbox.addWidget(self.text)
+
+
+        self.list = qtw.QListWidget(self)
+        self.list.itemDoubleClicked.connect(self.return_selection)
+
+        for item in os.listdir("./.saves"):
+            item.replace('-', ':')
+            logging.debug("Entering item {} in the list".format(item))
+            qtw.QListWidgetItem(item, self.list)
+
+        self.vbox.addWidget(self.list)
+
+    def return_selection(self, item):
+        logging.debug("Selected to load file {}.".format(item.text()))
+        self.selected_item = item.text().replace(":", "-")
+        self.close()
 
 
 class BoggleGame(qtw.QWidget):
@@ -277,11 +364,19 @@ class BoggleGame(qtw.QWidget):
 
         # Roll the dice
         self.boggle_letters.clear()
-        self.boggle_letters.draw_dice()
+        self.boggle_letters.roll_dice()
 
         # Start the timer
-        self.time_remaining = 5
+        self.time_remaining = 120
         self.timer_display.reset()
+        self.timer.start(1000)
+
+    def pause(self):
+        self.timer.stop()
+        self.input_box.setReadOnly(True)
+
+    def resume(self):
+        self.input_box.setReadOnly(False)
         self.timer.start(1000)
 
     def submit_guess(self):
@@ -313,6 +408,31 @@ class BoggleGame(qtw.QWidget):
             self.start()
         else:
             app.quit()
+
+    def save(self):
+        dice = self.boggle_letters.get_dice()
+        guesses = self.typed_words_box.toPlainText()
+        # Returns a tuple
+        time_left = self.timer_display.get_time()
+        
+        game_state = (dice, guesses, time_left)
+
+        return pickle.dumps(game_state, 0)
+
+    def load(self, state_to_load):
+        # Expects a file to unpickle
+
+        with open("./.saves/" + state_to_load, "r") as f:
+            game_state = pickle.Unpickler(f).load()
+
+        dice, guesses, time_left = game_state
+
+        self.boggle_letters.set_dice(dice)
+
+        self.typed_words_box.clear()
+        self.typed_words_box.append(guesses)
+
+        self.timer_display.set_time(time_left)
 
 
 class EndgameMessage(qtw.QMessageBox):
@@ -348,6 +468,13 @@ class TimerDisplay(qtw.QLCDNumber):
         self.seconds = 0
         self.display("{}.{}".format(self.minutes, format(self.seconds, '02')))
 
+    def get_time(self):
+        return (self.minutes, self.seconds)
+
+    def set_time(self, time_tuple):
+        self.minutes, self.seconds = time_tuple
+        self.update_timer()
+
 
 class BoggleLetters(qtw.QWidget):
     def __init__(self, parent):
@@ -360,9 +487,6 @@ class BoggleLetters(qtw.QWidget):
         self.vbox.setSpacing(0)
 
     def draw_dice(self):
-        self.dice = rollDice()
-
-        logging.debug("Dice rolled are {}".format(self.dice))
         
         for row in self.dice:
             rowLayout = qtw.QHBoxLayout()
@@ -376,8 +500,20 @@ class BoggleLetters(qtw.QWidget):
             for column in range(0, self.vbox.itemAt(row).count()):
                 self.vbox.itemAt(row).itemAt(column).widget().deleteLater()
 
+    def roll_dice(self):
+        self.dice = rollDice()
+        logging.debug("Dice rolled are {}".format(self.dice))
+
+        self.draw_dice()
+
     def get_dice(self):
         return self.dice
+
+    def set_dice(self, dice):
+        self.dice = dice
+        self.clear()
+        self.draw_dice()
+
 
 class LetterBox(qtw.QWidget):
     def __init__(self, parent, letter):
@@ -414,23 +550,6 @@ class LetterBox(qtw.QWidget):
         qp.drawPolygon(square)
 
         qp.end()
-
-    def kill(self):
-        pass
-
-
-class StartNewGameButton(qtw.QPushButton):
-    def __init__(self, parent):
-        qtw.QPushButton.__init__(self, parent)
-        self.setText("Start New Game")
-        self.move(20, 160)
-
-
-class QuitButton(qtw.QPushButton):
-    def __init__(self, parent):
-        qtw.QPushButton.__init__(self, parent)
-        self.setText("Quit")
-        self.move(150, 160)
 
 
 if __name__ == "__main__":
