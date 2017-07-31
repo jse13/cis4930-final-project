@@ -12,7 +12,7 @@ import enchant
 import logging
 from datetime import datetime
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR)
 
 
 dice = (['A', 'E', 'A', 'N', 'E', 'G'],
