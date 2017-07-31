@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+'''
+Julian Engel
+jse13
+'''
 
 from __future__ import print_function
 from PyQt5 import QtWidgets as qtw
